@@ -1,0 +1,27 @@
+
+# Python environment and IDE
+.venv/
+venv/
+.idea/
+__pycache__/
+*.py[cod]
+.env
+.streamlit/secrets.toml
+
+# Large satellite raster files
+*.tif
+*.tiff
+*.jp2
+
+# Cache and temporary files
+cache/
+*.log
+
+# Trained model weights
+*.pth
+*.pt
+
+# Generated output files and datasets
+dataset/
+outputs/
+cache/
