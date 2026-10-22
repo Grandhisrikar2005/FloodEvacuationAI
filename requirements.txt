@@ -8,3 +8,4 @@ rasterio
 geopandas
 shapely
 pyproj
+scikit-learn
