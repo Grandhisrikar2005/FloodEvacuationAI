@@ -1,0 +1,14 @@
+ROUTE DEMONSTRATION REPORT
+Candidate mask exposure is a heuristic, not confirmed flooding.
+Origin node: 7939035496
+Destination node: 3776182344
+
+Shortest-distance
+distance_km: 0.6904
+candidate_exposure_equivalent_km: 0.2634
+unknown_equivalent_km: 0.0000
+
+Flood-penalized
+distance_km: 0.7239
+candidate_exposure_equivalent_km: 0.0224
+unknown_equivalent_km: 0.0000
