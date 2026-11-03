@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 
 from rasterio.windows import Window
-from rasterio.warp import reproject, Resampling
 from torchvision.models import mobilenet_v2
 from torchvision import transforms
 from PIL import Image
@@ -51,9 +50,16 @@ transform = transforms.Compose([
 
 def load_model():
     model = mobilenet_v2(weights=None)
-    model.classifier[1] = nn.Linear(model.last_channel, len(CLASS_NAMES))
+    model.classifier[1] = nn.Linear(
+        model.last_channel, len(CLASS_NAMES)
+    )
 
-    state = torch.load(MODEL_PATH, map_location=device, weights_only=True)
+    state = torch.load(
+        MODEL_PATH,
+        map_location=device,
+        weights_only=True,
+    )
+
     model.load_state_dict(state)
     model.to(device)
     model.eval()
@@ -70,14 +76,16 @@ def main():
 
     if OUTPUT_PATH.exists():
         raise FileExistsError(
-            f"Output already exists; refusing to overwrite: {OUTPUT_PATH}"
+            f"Output already exists: {OUTPUT_PATH}"
         )
 
     model = load_model()
+
     print("Loaded model:", MODEL_PATH)
     print("Device:", device)
 
     with rasterio.open(INPUT_IMAGE) as src:
+
         profile = src.profile.copy()
         profile.update(
             count=1,
@@ -91,31 +99,42 @@ def main():
 
         for row in range(0, src.height, TILE_SIZE):
             for col in range(0, src.width, TILE_SIZE):
+
                 width = min(TILE_SIZE, src.width - col)
                 height = min(TILE_SIZE, src.height - row)
 
-                # Avoid partial edge tiles that would distort scale.
-                if width != TILE_SIZE or height != TILE_SIZE:
-                    continue
-
-                tile_jobs.append((row, col))
+                tile_jobs.append((row, col, height, width))
 
         total_tiles = len(tile_jobs)
-        print("Image dimensions:", src.width, "x", src.height)
+
+        print("Original dimensions:", src.width, "x", src.height)
         print("Tiles to classify:", total_tiles)
 
         with rasterio.open(OUTPUT_PATH, "w", **profile) as dst:
+
             for start in range(0, total_tiles, BATCH_SIZE):
+
                 batch_jobs = tile_jobs[start:start + BATCH_SIZE]
+
                 tensors = []
                 windows = []
 
-                for row, col in batch_jobs:
-                    window = Window(col, row, TILE_SIZE, TILE_SIZE)
-                    rgb = src.read([1, 2, 3], window=window)
+                for row, col, height, width in batch_jobs:
+
+                    window = Window(col, row, width, height)
+
+                    rgb = src.read(
+                        [1, 2, 3],
+                        window=window,
+                        out_shape=(3, TILE_SIZE, TILE_SIZE),
+                    )
+
                     rgb = np.moveaxis(rgb, 0, -1)
 
-                    image = Image.fromarray(rgb.astype(np.uint8), "RGB")
+                    image = Image.fromarray(
+                        rgb.astype(np.uint8), "RGB"
+                    )
+
                     tensors.append(transform(image))
                     windows.append(window)
 
@@ -126,27 +145,37 @@ def main():
                     predictions = logits.argmax(dim=1).cpu().numpy()
 
                 for window, class_id in zip(windows, predictions):
+
+                    height = int(window.height)
+                    width = int(window.width)
+
+                    prediction = np.full(
+                        (height, width),
+                        int(class_id),
+                        dtype=np.uint8,
+                    )
+
                     dst.write(
-                        np.full(
-                            (TILE_SIZE, TILE_SIZE),
-                            int(class_id),
-                            dtype=np.uint8,
-                        ),
+                        prediction,
                         1,
                         window=window,
                     )
 
                 print(
-                    f"Processed {min(start + len(batch_jobs), total_tiles)}"
+                    f"Processed "
+                    f"{min(start + len(batch_jobs), total_tiles)}"
                     f"/{total_tiles} tiles"
                 )
 
     print("\nLand-cover prediction completed.")
     print("Output:", OUTPUT_PATH)
-    print("Class encoding:")
+    print("Output CRS:", profile["crs"])
+    print("Output dimensions:", profile["width"], "x", profile["height"])
+
     for class_id, name in enumerate(CLASS_NAMES):
-        print(f"  {class_id} = {name}")
-    print(f"  {NODATA} = NoData")
+        print(f"{class_id} = {name}")
+
+    print(f"{NODATA} = NoData")
 
 
 if __name__ == "__main__":

@@ -539,7 +539,7 @@ elif page == "Spatial Risk Maps":
         spatial_map = folium.Map(
             location=DEFAULT_CENTER,
             zoom_start=14,
-            tiles="CartoDB positron",
+            tiles="OpenStreetMap",
             control_scale=True,
         )
 
@@ -588,6 +588,40 @@ elif page == "Spatial Risk Maps":
             "The land-cover raster contains class IDs 0–5. The integrated risk "
             "raster contains provisional heuristic scores from 0–100; 255 is NoData. "
             "Neither layer represents a calibrated probability of future flooding."
+        )
+
+
+        st.markdown("### Integrated Flood-Risk Legend")
+
+        risk_categories = [
+            ("Low", "0–49", "#ffb02e"),
+            ("Moderate", "50–64", "#f1c40f"),
+            ("High", "65–79", "#e67e22"),
+            ("Very High", "80–100", "#e74c3c"),
+        ]
+
+        risk_cols = st.columns(4)
+
+        for col, (name, score, color) in zip(risk_cols, risk_categories):
+            col.markdown(
+                f"""
+                <div style="
+                    background-color:{color};
+                    padding:12px 5px;
+                    border-radius:8px;
+                    text-align:center;
+                    color:#111;
+                    font-weight:bold;
+                ">
+                    {name}<br>{score}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.caption(
+            "Risk categories are visualization bands for experimental "
+            "heuristic scores, not calibrated flood probabilities."
         )
 
 elif page == "Detailed Risk Assessment":

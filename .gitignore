@@ -4,6 +4,9 @@ __pycache__/
 .streamlit/secrets.toml
 
 *.tif
+!outputs/landcover/vijayawada_landcover_expanded.tif
+!outputs/flood_risk/experimental_integrated_risk.tif
+!dataset/temporal/krishna_flood_2024/flood_analysis/best_flood_mask_v3_2024-09-01.tif
 *.tiff
 *.jp2
 
