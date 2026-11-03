@@ -1,0 +1,8 @@
+split,filename,path,folder_label,model_prediction,prediction_confidence,review_status
+validation,barren_0031.jpg,dataset\expanded_v1\validation\Barren\barren_0031.jpg,Barren,Agriculture,0.7454,needs_review
+validation,barren_0033.jpg,dataset\expanded_v1\validation\Barren\barren_0033.jpg,Barren,Urban,0.8434,needs_review
+validation,roads_0039.jpg,dataset\expanded_v1\validation\Roads\roads_0039.jpg,Roads,Agriculture,0.7688,needs_review
+validation,roads_0042.jpg,dataset\expanded_v1\validation\Roads\roads_0042.jpg,Roads,Agriculture,0.8857,needs_review
+validation,roads_0046.jpg,dataset\expanded_v1\validation\Roads\roads_0046.jpg,Roads,Urban,0.9009,needs_review
+validation,urban_0064.jpg,dataset\expanded_v1\validation\Urban\urban_0064.jpg,Urban,Barren,0.912,needs_review
+validation,water_0092.jpg,dataset\expanded_v1\validation\Water\water_0092.jpg,Water,Agriculture,0.7453,needs_review

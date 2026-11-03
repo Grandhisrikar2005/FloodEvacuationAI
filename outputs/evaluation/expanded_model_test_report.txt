@@ -1,0 +1,23 @@
+Test images: 112
+Accuracy: 79.46%
+
+              precision    recall  f1-score   support
+
+ Agriculture     0.7917    0.8261    0.8085        23
+      Barren     0.7333    0.7857    0.7586        14
+       Roads     0.7619    0.7273    0.7442        22
+       Urban     0.7000    0.8235    0.7568        17
+  Vegetation     0.9474    0.8571    0.9000        21
+       Water     0.8462    0.7333    0.7857        15
+
+    accuracy                         0.7946       112
+   macro avg     0.7967    0.7922    0.7923       112
+weighted avg     0.8011    0.7946    0.7959       112
+
+Confusion matrix (rows=actual, columns=predicted):
+[[19  1  1  0  1  1]
+ [ 0 11  1  2  0  0]
+ [ 2  0 16  3  0  1]
+ [ 0  2  1 14  0  0]
+ [ 1  0  2  0 18  0]
+ [ 2  1  0  1  0 11]]

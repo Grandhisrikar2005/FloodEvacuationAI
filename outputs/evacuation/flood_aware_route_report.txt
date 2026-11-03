@@ -1,0 +1,33 @@
+FLOOD-AWARE EVACUATION ROUTE REPORT
+================================================
+Flood exposure is sampled from a candidate mask.
+It is not a confirmed measurement of road inundation.
+Unknown raster coverage is not considered safe.
+Origin and destination are demonstration coordinates.
+
+Shortest-distance
+-----------------
+distance_km: 2.4507
+estimated_minutes: 4.9013
+candidate_exposure_distance_km: 0.0000
+unknown_distance_km: 0.0000
+candidate_exposure_percent: 0.0000
+flood_aware_cost_km_equivalent: 2.4507
+
+Fastest-estimated
+-----------------
+distance_km: 2.4507
+estimated_minutes: 4.9013
+candidate_exposure_distance_km: 0.0000
+unknown_distance_km: 0.0000
+candidate_exposure_percent: 0.0000
+flood_aware_cost_km_equivalent: 2.4507
+
+Flood-aware
+-----------
+distance_km: 2.4507
+estimated_minutes: 4.9013
+candidate_exposure_distance_km: 0.0000
+unknown_distance_km: 0.0000
+candidate_exposure_percent: 0.0000
+flood_aware_cost_km_equivalent: 2.4507

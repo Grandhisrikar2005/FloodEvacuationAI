@@ -1,6 +1,7 @@
 
 from pathlib import Path
 from typing import Any
+import importlib.util
 
 import folium
 import networkx as nx
@@ -26,6 +27,22 @@ MASK_PATH = (
     ROOT / "dataset" / "temporal" / "krishna_flood_2024"
     / "flood_analysis" / "best_flood_mask_v3_2024-09-01.tif"
 )
+
+LANDCOVER_RASTER_PATH = (
+    ROOT / "outputs" / "landcover" / "vijayawada_landcover_expanded.tif"
+)
+INTEGRATED_RISK_PATH = (
+    ROOT / "outputs" / "flood_risk" / "experimental_integrated_risk.tif"
+)
+RISK_PREDICTOR_PATH = ROOT / "flood_risk" / "risk_predictor.py"
+
+LANDCOVER_NAMES = [
+    "Agriculture", "Barren", "Roads", "Urban", "Vegetation", "Water"
+]
+LANDCOVER_COLORS = [
+    (230, 190, 80), (160, 145, 125), (70, 70, 70),
+    (220, 80, 70), (60, 150, 80), (50, 130, 210)
+]
 
 DEFAULT_CENTER = (16.5062, 80.6480)
 ASSUMED_SPEED_KMH = 30.0
@@ -283,6 +300,74 @@ def draw_route(map_object, graph, route, color, label):
     ).add_to(map_object)
 
 
+
+# -------------------------- Spatial raster visualization --------------------------
+
+@st.cache_data(show_spinner=False)
+def read_spatial_overlay(path_string, layer_type):
+    """Read a project raster and return an RGBA overlay plus geographic bounds."""
+    from rasterio.warp import transform_bounds
+    from PIL import Image
+
+    path = Path(path_string)
+    if not path.exists():
+        raise FileNotFoundError(path)
+
+    with rasterio.open(path) as src:
+        if src.crs is None:
+            raise ValueError(f"Raster has no CRS: {path.name}")
+
+        values = src.read(1)
+        valid = np.isfinite(values)
+        if src.nodata is not None:
+            valid &= values != src.nodata
+        valid &= values != 255
+
+        rgba = np.zeros((src.height, src.width, 4), dtype=np.uint8)
+
+        if layer_type == "landcover":
+            palette = np.asarray(LANDCOVER_COLORS, dtype=np.uint8)
+            for class_id in range(len(LANDCOVER_NAMES)):
+                mask = valid & (values == class_id)
+                rgba[mask, :3] = palette[class_id]
+                rgba[mask, 3] = 190
+        elif layer_type == "risk":
+            # Continuous-looking red/orange/yellow risk palette for 0-100 scores.
+            clipped = np.clip(values.astype(float), 0, 100)
+            t = clipped / 100.0
+            rgba[..., 0] = 255
+            rgba[..., 1] = (220 * (1 - t)).astype(np.uint8)
+            rgba[..., 2] = (45 * (1 - t)).astype(np.uint8)
+            rgba[..., 3] = np.where(valid, 205, 0).astype(np.uint8)
+        else:
+            raise ValueError("Unknown raster layer type.")
+
+        bounds = transform_bounds(src.crs, "EPSG:4326", *src.bounds, densify_pts=21)
+        metadata = {
+            "width": src.width,
+            "height": src.height,
+            "crs": str(src.crs),
+            "valid_pixels": int(np.count_nonzero(valid)),
+            "bounds": bounds,
+        }
+
+    return rgba, bounds, metadata
+
+
+def load_detailed_predictor():
+    """Load the existing rule-based predictor without making it a hard dependency."""
+    if not RISK_PREDICTOR_PATH.exists():
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "floodevacuation_risk_predictor", RISK_PREDICTOR_PATH
+    )
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 # -------------------------- Report --------------------------
 
 def build_report(results):
@@ -353,6 +438,8 @@ with st.sidebar:
         "Dashboard",
         [
             "Evacuation Planner",
+            "Spatial Risk Maps",
+            "Detailed Risk Assessment",
             "Project Overview",
             "Data & Methodology",
             "Diagnostics",
@@ -429,6 +516,175 @@ if page == "Project Overview":
         "Compare route distance and mask-based exposure",
         language="text",
     )
+
+elif page == "Spatial Risk Maps":
+    st.title("Spatial Risk Maps")
+    st.write(
+        "Explore the existing MobileNetV2 land-cover classification and "
+        "the integrated experimental risk raster for the Vijayawada study area."
+    )
+
+    available_layers = []
+    if LANDCOVER_RASTER_PATH.exists():
+        available_layers.append(("Land-cover classification", LANDCOVER_RASTER_PATH, "landcover"))
+    if INTEGRATED_RISK_PATH.exists():
+        available_layers.append(("Integrated heuristic risk", INTEGRATED_RISK_PATH, "risk"))
+
+    if not available_layers:
+        st.error(
+            "No spatial prediction rasters were found. Expected files:\n"
+            f"{LANDCOVER_RASTER_PATH}\n{INTEGRATED_RISK_PATH}"
+        )
+    else:
+        spatial_map = folium.Map(
+            location=DEFAULT_CENTER,
+            zoom_start=14,
+            tiles="CartoDB positron",
+            control_scale=True,
+        )
+
+        for label, raster_path, layer_type in available_layers:
+            try:
+                rgba, bounds, metadata = read_spatial_overlay(
+                    str(raster_path), layer_type
+                )
+                folium.raster_layers.ImageOverlay(
+                    image=rgba,
+                    bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+                    name=label,
+                    opacity=0.85,
+                    interactive=True,
+                    cross_origin=False,
+                    zindex=2 if layer_type == "risk" else 1,
+                ).add_to(spatial_map)
+
+                with st.expander(f"{label} — raster details"):
+                    st.write(f"File: `{raster_path.name}`")
+                    st.write(f"Dimensions: {metadata['width']:,} × {metadata['height']:,}")
+                    st.write(f"CRS: {metadata['crs']}")
+                    st.write(f"Valid pixels: {metadata['valid_pixels']:,}")
+            except Exception as exc:
+                st.error(f"Could not display {label}: {exc}")
+
+        folium.LayerControl(collapsed=False).add_to(spatial_map)
+        st_folium(
+            spatial_map,
+            height=620,
+            use_container_width=True,
+            key="spatial_prediction_map",
+            returned_objects=[],
+        )
+
+        st.markdown("### Land-cover legend")
+        legend_cols = st.columns(3)
+        for index, (name, color) in enumerate(zip(LANDCOVER_NAMES, LANDCOVER_COLORS)):
+            hex_color = "#{:02x}{:02x}{:02x}".format(*color)
+            legend_cols[index % 3].markdown(
+                f'<span style="display:inline-block;width:12px;height:12px;'
+                f'background:{hex_color};margin-right:7px;border-radius:2px"></span>{name}',
+                unsafe_allow_html=True,
+            )
+        st.caption(
+            "The land-cover raster contains class IDs 0–5. The integrated risk "
+            "raster contains provisional heuristic scores from 0–100; 255 is NoData. "
+            "Neither layer represents a calibrated probability of future flooding."
+        )
+
+elif page == "Detailed Risk Assessment":
+    st.title("Detailed Flood Risk Assessment")
+    st.write(
+        "Run the project's existing weighted rule-based assessment using "
+        "land cover, rainfall, water proximity, elevation and drainage inputs."
+    )
+
+    predictor = None
+    try:
+        predictor = load_detailed_predictor()
+    except Exception as exc:
+        st.error(f"Could not load the existing risk predictor: {exc}")
+
+    if predictor is None:
+        st.error(
+            "The existing predictor was not found. Place `risk_predictor.py` "
+            "inside the project's `flood_risk` folder."
+        )
+    else:
+        st.info(
+            "This assessment currently uses manually entered inputs. The values "
+            "are not automatically extracted from a clicked map location or live "
+            "weather/terrain services. Replace the example defaults with measured "
+            "or defensibly estimated local values."
+        )
+        left, right = st.columns(2)
+        with left:
+            selected_landcover = st.selectbox(
+                "Land-cover class",
+                list(predictor.LAND_COVER_WEIGHTS.keys()),
+            )
+            rainfall_value = st.number_input(
+                "Rainfall accumulation (mm)",
+                min_value=0.0, max_value=3000.0, value=100.0, step=10.0,
+                help="Enter the accumulation for a clearly defined time period.",
+            )
+            water_distance_value = st.number_input(
+                "Distance to nearest water body (m)",
+                min_value=0.0, max_value=100000.0, value=500.0, step=50.0,
+            )
+        with right:
+            elevation_value = st.number_input(
+                "Relative elevation (m)",
+                min_value=-1000.0, max_value=10000.0, value=20.0, step=5.0,
+                help="The current prototype assumes higher relative elevation reduces the score.",
+            )
+            drainage_value = st.slider(
+                "Drainage quality (0 = poor, 10 = excellent)",
+                min_value=0.0, max_value=10.0, value=5.0, step=0.5,
+            )
+
+        if st.button("Calculate detailed risk", type="primary", use_container_width=True):
+            try:
+                assessment = predictor.calculate_flood_risk_detailed(
+                    selected_landcover,
+                    rainfall_value,
+                    water_distance_value,
+                    elevation_value,
+                    drainage_value,
+                )
+                st.session_state["detailed_risk_result"] = assessment
+                st.session_state["detailed_risk_inputs"] = {
+                    "land_cover": selected_landcover,
+                    "rainfall_mm": rainfall_value,
+                    "water_distance_m": water_distance_value,
+                    "elevation_m": elevation_value,
+                    "drainage_score": drainage_value,
+                }
+            except Exception as exc:
+                st.error(f"Risk assessment failed: {exc}")
+
+        assessment = st.session_state.get("detailed_risk_result")
+        if assessment:
+            st.divider()
+            score_col, level_col, model_col = st.columns(3)
+            score_col.metric("Experimental risk score", f"{assessment['risk_score']:.4f}")
+            level_col.metric("Risk category", assessment["risk_level"])
+            model_col.metric("Model", "Weighted rules")
+
+            st.progress(float(assessment["risk_score"]))
+            st.markdown("### Factor scores")
+            st.bar_chart(assessment["factor_scores"])
+            st.markdown("### Weighted contributions")
+            st.bar_chart(assessment["weighted_contributions"])
+
+            st.markdown("### Explanation")
+            for factor, explanation in assessment["explanations"].items():
+                st.write(f"**{factor.replace('_', ' ').title()}:** {explanation}")
+
+            st.warning(
+                "This score is an experimental susceptibility indicator, not a "
+                "validated flood probability or emergency warning. The weights, "
+                "normalization assumptions and thresholds require calibration "
+                "against observed flood data."
+            )
 
 elif page == "Data & Methodology":
     st.title("Data & Methodology")
